@@ -1,5 +1,4 @@
 import { Agent, Session, Task, AuditLog, Schedule, Tool } from './supabase'
-import { v4 as uuid } from 'uuid'
 
 // Demo Agents
 export const demoAgents: Agent[] = [
@@ -12,6 +11,7 @@ export const demoAgents: Agent[] = [
     status: 'online',
     tasksDone: 124,
     successRate: 92,
+    favorite: false,
   },
   {
     id: 'agent-2',
@@ -22,6 +22,7 @@ export const demoAgents: Agent[] = [
     status: 'online',
     tasksDone: 98,
     successRate: 89,
+    favorite: false,
   },
   {
     id: 'agent-3',
@@ -32,6 +33,7 @@ export const demoAgents: Agent[] = [
     status: 'idle',
     tasksDone: 210,
     successRate: 95,
+    favorite: false,
   },
   {
     id: 'agent-4',
@@ -42,6 +44,7 @@ export const demoAgents: Agent[] = [
     status: 'online',
     tasksDone: 76,
     successRate: 87,
+    favorite: false,
   },
   {
     id: 'agent-5',
@@ -52,6 +55,7 @@ export const demoAgents: Agent[] = [
     status: 'offline',
     tasksDone: 44,
     successRate: 82,
+    favorite: false,
   },
   {
     id: 'agent-6',
@@ -62,6 +66,7 @@ export const demoAgents: Agent[] = [
     status: 'online',
     tasksDone: 158,
     successRate: 90,
+    favorite: false,
   },
 ]
 

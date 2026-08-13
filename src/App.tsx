@@ -22,6 +22,7 @@ import {
   fetchTools,
 } from './lib/supabase'
 import { demoData } from './lib/demoData'
+import { loadPersist, savePersist } from './lib/persistence'
 
 type View = 'Overview' | 'Agents' | 'Sessions' | 'Activity' | 'Schedules' | 'Tools'
 
@@ -43,7 +44,7 @@ export default function App(): JSX.Element {
     return () => clearInterval(id)
   }, [])
 
-  // load data from Supabase with demo fallback
+  // load data from Supabase with demo fallback and local persistence
   useEffect(() => {
     let mounted = true
 
@@ -59,24 +60,36 @@ export default function App(): JSX.Element {
 
       if (!mounted) return
 
-      // if any are null, fallback to demoData for everything
       const useDemo = [a, s, t, l, sch, to].some((x) => x === null)
+      const base = useDemo
+        ? { agents: demoData.agents, sessions: demoData.sessions, tasks: demoData.tasks, auditLogs: demoData.auditLogs, schedules: demoData.schedules, tools: demoData.tools }
+        : { agents: (a ?? []), sessions: (s ?? []), tasks: (t ?? []), auditLogs: (l ?? []), schedules: (sch ?? []), tools: (to ?? []) }
 
-      if (useDemo) {
-        setAgents(demoData.agents)
-        setSessions(demoData.sessions)
-        setTasks(demoData.tasks)
-        setAuditLogs(demoData.auditLogs)
-        setSchedules(demoData.schedules)
-        setTools(demoData.tools)
-      } else {
-        setAgents(a ?? [])
-        setSessions(s ?? [])
-        setTasks(t ?? [])
-        setAuditLogs(l ?? [])
-        setSchedules(sch ?? [])
-        setTools(to ?? [])
+      // merge persisted overrides
+      const persisted = loadPersist()
+
+      if (persisted) {
+        // if persisted contains agents/tools/schedules, merge by id
+        if (persisted.agents) {
+          const map = new Map(persisted.agents.map((x) => [x.id, x]))
+          base.agents = base.agents.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+        }
+        if (persisted.tools) {
+          const map = new Map(persisted.tools.map((x) => [x.id, x]))
+          base.tools = base.tools.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+        }
+        if (persisted.schedules) {
+          const map = new Map(persisted.schedules.map((x) => [x.id, x]))
+          base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+        }
       }
+
+      setAgents(base.agents)
+      setSessions(base.sessions)
+      setTasks(base.tasks)
+      setAuditLogs(base.auditLogs)
+      setSchedules(base.schedules)
+      setTools(base.tools)
     }
 
     loadAll()
@@ -91,8 +104,42 @@ export default function App(): JSX.Element {
   const avgSuccessRate = agents.length ? Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length) : 0
   const sessionsRun = sessions.length
 
+  // persistence helpers for interactive changes
+  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[] }) {
+    const toSave = {
+      agents: updated?.agents ?? agents,
+      tools: updated?.tools ?? tools,
+      schedules: updated?.schedules ?? schedules,
+    }
+    savePersist(toSave)
+  }
+
+  function toggleTool(id: string) {
+    setTools((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, active: !t.active } : t))
+      persistAll({ tools: next })
+      return next
+    })
+  }
+
+  function toggleSchedule(id: string) {
+    setSchedules((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+      persistAll({ schedules: next })
+      return next
+    })
+  }
+
+  function toggleFavoriteAgent(id: string) {
+    setAgents((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, favorite: !a.favorite } : a))
+      persistAll({ agents: next })
+      return next
+    })
+  }
+
   return (
-    <div className="app-root">
+    <div className="app-root fade-in">
       <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} />
 
       <main className="main-content container">
@@ -135,7 +182,7 @@ export default function App(): JSX.Element {
           <div style={{ display: 'grid', gap: 16 }}>
             <div className="card">
               <h3>Agents</h3>
-              <AgentCards agents={agents} />
+              <AgentCards agents={agents} onToggleFavorite={toggleFavoriteAgent} />
             </div>
 
             <div className="card">
@@ -153,7 +200,7 @@ export default function App(): JSX.Element {
         <section style={{ marginTop: 16, display: view === 'Agents' ? 'block' : 'none' }}>
           <div className="card">
             <h2>Agents</h2>
-            <AgentCards agents={agents} large />
+            <AgentCards agents={agents} large onToggleFavorite={toggleFavoriteAgent} />
           </div>
         </section>
 
@@ -174,14 +221,14 @@ export default function App(): JSX.Element {
         <section style={{ marginTop: 16, display: view === 'Schedules' ? 'block' : 'none' }}>
           <div className="card">
             <h2>Schedules</h2>
-            <ScheduleList schedules={schedules} />
+            <ScheduleList schedules={schedules} onToggleEnabled={toggleSchedule} />
           </div>
         </section>
 
         <section style={{ marginTop: 16, display: view === 'Tools' ? 'block' : 'none' }}>
           <div className="card">
             <h2>Tool Registry</h2>
-            <ToolRegistry tools={tools} />
+            <ToolRegistry tools={tools} onToggleActive={toggleTool} />
           </div>
         </section>
       </main>

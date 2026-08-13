@@ -10,6 +10,7 @@ export type Agent = {
   status: 'online' | 'idle' | 'offline'
   tasksDone: number
   successRate: number // 0-100
+  favorite?: boolean
 }
 
 export type Task = {
