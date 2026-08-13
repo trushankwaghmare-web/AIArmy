@@ -1,0 +1,64 @@
+@import './index.css';
+
+/* Enhanced App.css - professional polish, shadows, motion, refined spacing */
+:root {
+  --card-radius: 14px;
+  --card-shadow: 0 6px 18px rgba(2, 8, 15, 0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+}
+
+/* Slightly tighter typography */
+.app-root { font-synthesis: none; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale }
+
+/* Card updates */
+.card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius: var(--card-radius);
+  padding: calc(var(--spacing-unit) * 2);
+  box-shadow: var(--card-shadow);
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: transform 220ms cubic-bezier(.2,.9,.2,1), box-shadow 220ms;
+}
+.card:hover { transform: translateY(-6px); box-shadow: 0 14px 40px rgba(2,8,15,0.7) }
+
+/* Smooth presence animations */
+.fade-in { animation: fadeIn 420ms ease-out both }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
+
+/* Buttons */
+.button {
+  background: linear-gradient(90deg,var(--color-500),var(--color-600));
+  color: #021924; border: none; padding: 8px 12px; border-radius: 10px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 180, 215, 0.12);
+}
+.button.ghost { background: transparent; color: var(--color-50); border: 1px solid rgba(255,255,255,0.04); }
+.button:focus { outline: 2px solid rgba(0,180,215,0.18); outline-offset: 2px }
+
+/* Toggle switch */
+.toggle {
+  width: 44px; height: 26px; border-radius: 999px; background: rgba(255,255,255,0.06); padding: 3px; display:inline-flex; align-items:center; cursor:pointer; transition: background 200ms;
+}
+.toggle .knob { width:20px; height:20px; background:white; border-radius:999px; transform: translateX(0); transition: transform 220ms cubic-bezier(.2,.9,.2,1); box-shadow: 0 4px 12px rgba(2,8,15,0.6) }
+.toggle.on { background: linear-gradient(90deg,var(--color-400),var(--color-500)); }
+.toggle.on .knob { transform: translateX(18px); }
+
+/* Star favorite */
+.star { cursor:pointer; width:28px;height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; transition: background 200ms, transform 200ms }
+.star:hover { transform: scale(1.06) }
+.star.on { background: linear-gradient(90deg,#ffd66b,#ffb84c); color:#062022 }
+.star svg { width:16px;height:16px }
+
+/* Agent avatar polish */
+.agent-avatar { width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--color-400),var(--color-500)); display:flex;align-items:center;justify-content:center;font-weight:700;color:#012033; box-shadow: 0 6px 14px rgba(0,0,0,0.35) }
+
+/* Card header improved */
+.header { display:flex; align-items:center; justify-content:space-between; gap: calc(var(--spacing-unit) * 2); }
+
+/* Subtle element motion for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .card, .fade-in, .button, .toggle { transition: none !important; animation: none !important }
+}
+
+/* Small screens adjustments */
+@media (max-width: 640px) {
+  .card { padding: calc(var(--spacing-unit) * 1.5) }
+}
