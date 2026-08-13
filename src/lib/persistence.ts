@@ -1,5 +1,5 @@
 // Typed local persistence helpers for AI Army Dashboard
-import { Agent, Tool, Schedule } from './supabase'
+import type { Agent, Tool, Schedule } from './supabase'
 
 export type PersistedState = {
   agents?: Agent[]

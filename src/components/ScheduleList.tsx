@@ -1,5 +1,4 @@
-import React from 'react'
-import { Schedule } from '../lib/supabase'
+import type { Schedule } from '../lib/supabase'
 
 type Props = {
   schedules: Schedule[]

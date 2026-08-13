@@ -1,5 +1,4 @@
-import React from 'react'
-import { Session } from '../lib/supabase'
+import type { Session } from '../lib/supabase'
 
 type Props = {
   sessions: Session[]

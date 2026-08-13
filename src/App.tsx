@@ -7,20 +7,7 @@ import ActivityFeed from './components/ActivityFeed'
 import ScheduleList from './components/ScheduleList'
 import ToolRegistry from './components/ToolRegistry'
 import './App.css'
-import {
-  Agent,
-  Session,
-  Task,
-  AuditLog,
-  Schedule,
-  Tool,
-  fetchAgents,
-  fetchSessions,
-  fetchTasks,
-  fetchAuditLogs,
-  fetchSchedules,
-  fetchTools,
-} from './lib/supabase'
+import type { Agent, Session, Task, AuditLog, Schedule, Tool } from './lib/supabase'
 import { demoData } from './lib/demoData'
 import { loadPersist, savePersist } from './lib/persistence'
 
@@ -44,59 +31,40 @@ export default function App(): JSX.Element {
     return () => clearInterval(id)
   }, [])
 
-  // load data from Supabase with demo fallback and local persistence
+  // load demo data and merge persisted overrides (no Supabase calls)
   useEffect(() => {
-    let mounted = true
+    const base = {
+      agents: demoData.agents,
+      sessions: demoData.sessions,
+      tasks: demoData.tasks,
+      auditLogs: demoData.auditLogs,
+      schedules: demoData.schedules,
+      tools: demoData.tools,
+    }
 
-    async function loadAll() {
-      const [a, s, t, l, sch, to] = await Promise.all([
-        fetchAgents(),
-        fetchSessions(),
-        fetchTasks(),
-        fetchAuditLogs(),
-        fetchSchedules(),
-        fetchTools(),
-      ])
+    const persisted = loadPersist()
 
-      if (!mounted) return
-
-      const useDemo = [a, s, t, l, sch, to].some((x) => x === null)
-      const base = useDemo
-        ? { agents: demoData.agents, sessions: demoData.sessions, tasks: demoData.tasks, auditLogs: demoData.auditLogs, schedules: demoData.schedules, tools: demoData.tools }
-        : { agents: (a ?? []), sessions: (s ?? []), tasks: (t ?? []), auditLogs: (l ?? []), schedules: (sch ?? []), tools: (to ?? []) }
-
-      // merge persisted overrides
-      const persisted = loadPersist()
-
-      if (persisted) {
-        // if persisted contains agents/tools/schedules, merge by id
-        if (persisted.agents) {
-          const map = new Map(persisted.agents.map((x) => [x.id, x]))
-          base.agents = base.agents.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
-        }
-        if (persisted.tools) {
-          const map = new Map(persisted.tools.map((x) => [x.id, x]))
-          base.tools = base.tools.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
-        }
-        if (persisted.schedules) {
-          const map = new Map(persisted.schedules.map((x) => [x.id, x]))
-          base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
-        }
+    if (persisted) {
+      if (persisted.agents) {
+        const map = new Map(persisted.agents.map((x) => [x.id, x]))
+        base.agents = base.agents.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
       }
-
-      setAgents(base.agents)
-      setSessions(base.sessions)
-      setTasks(base.tasks)
-      setAuditLogs(base.auditLogs)
-      setSchedules(base.schedules)
-      setTools(base.tools)
+      if (persisted.tools) {
+        const map = new Map(persisted.tools.map((x) => [x.id, x]))
+        base.tools = base.tools.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+      }
+      if (persisted.schedules) {
+        const map = new Map(persisted.schedules.map((x) => [x.id, x]))
+        base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+      }
     }
 
-    loadAll()
-
-    return () => {
-      mounted = false
-    }
+    setAgents(base.agents)
+    setSessions(base.sessions)
+    setTasks(base.tasks)
+    setAuditLogs(base.auditLogs)
+    setSchedules(base.schedules)
+    setTools(base.tools)
   }, [])
 
   const activeAgentsCount = agents.filter((a) => a.status === 'online').length

@@ -1,4 +1,4 @@
-import { Agent, Session, Task, AuditLog, Schedule, Tool } from './supabase'
+import type { Agent, Session, Task, AuditLog, Schedule, Tool } from './supabase'
 
 // Demo Agents
 export const demoAgents: Agent[] = [

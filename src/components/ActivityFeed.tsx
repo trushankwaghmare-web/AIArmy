@@ -1,5 +1,4 @@
-import React from 'react'
-import { AuditLog } from '../lib/supabase'
+import type { AuditLog } from '../lib/supabase'
 
 type Props = {
   logs: AuditLog[]

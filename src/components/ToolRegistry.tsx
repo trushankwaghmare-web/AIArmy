@@ -1,5 +1,4 @@
-import React from 'react'
-import { Tool } from '../lib/supabase'
+import type { Tool } from '../lib/supabase'
 
 type Props = { tools: Tool[]; onToggleActive?: (id: string) => void }
 

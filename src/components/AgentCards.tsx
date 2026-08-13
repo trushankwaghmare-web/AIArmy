@@ -1,5 +1,4 @@
-import React from 'react'
-import { Agent } from '../lib/supabase'
+import type { Agent } from '../lib/supabase'
 
 type Props = {
   agents: Agent[]
