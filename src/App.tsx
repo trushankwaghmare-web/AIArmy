@@ -7,9 +7,68 @@ import ActivityFeed from './components/ActivityFeed'
 import ScheduleList from './components/ScheduleList'
 import ToolRegistry from './components/ToolRegistry'
 import './App.css'
-import type { Agent, Session, Task, AuditLog, Schedule, Tool } from './lib/supabase'
 import { demoData } from './lib/demoData'
 import { loadPersist, savePersist } from './lib/persistence'
+
+// Local types (kept here to avoid importing runtime Supabase types)
+type Agent = {
+  id: string
+  name: string
+  role: string
+  description?: string
+  avatarColor?: string
+  status: 'online' | 'idle' | 'offline'
+  tasksDone: number
+  successRate: number
+  favorite?: boolean
+}
+
+type Task = {
+  id: string
+  title: string
+  description?: string
+  agentId?: string
+  completed: boolean
+  success: boolean
+  runAt?: string
+}
+
+type Session = {
+  id: string
+  title: string
+  summary?: string
+  agentIds: string[]
+  tasksCount: number
+  progress: number
+  status: 'running' | 'completed' | 'failed' | 'queued'
+}
+
+type AuditLog = {
+  id: string
+  timestamp: string
+  agentName: string
+  action: string
+  scope?: string
+  success: boolean
+}
+
+type Schedule = {
+  id: string
+  name: string
+  interval: string
+  constraints?: string
+  nextRun: string
+  enabled: boolean
+}
+
+type Tool = {
+  id: string
+  name: string
+  category: string
+  version: string
+  active: boolean
+  description?: string
+}
 
 type View = 'Overview' | 'Agents' | 'Sessions' | 'Activity' | 'Schedules' | 'Tools'
 
@@ -31,15 +90,15 @@ export default function App(): JSX.Element {
     return () => clearInterval(id)
   }, [])
 
-  // load demo data and merge persisted overrides (no Supabase calls)
+  // load demo data and merge persisted overrides (no external API calls)
   useEffect(() => {
     const base = {
-      agents: demoData.agents,
-      sessions: demoData.sessions,
-      tasks: demoData.tasks,
-      auditLogs: demoData.auditLogs,
-      schedules: demoData.schedules,
-      tools: demoData.tools,
+      agents: demoData.agents as Agent[],
+      sessions: demoData.sessions as Session[],
+      tasks: demoData.tasks as Task[],
+      auditLogs: demoData.auditLogs as AuditLog[],
+      schedules: demoData.schedules as Schedule[],
+      tools: demoData.tools as Tool[],
     }
 
     const persisted = loadPersist()
