@@ -5,6 +5,7 @@ export type PersistedState = {
   agents?: Agent[]
   tools?: Tool[]
   schedules?: Schedule[]
+  theme?: string
 }
 
 const KEY = 'ai-army-dashboard:v1'

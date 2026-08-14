@@ -84,11 +84,26 @@ export default function App(): JSX.Element {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [tools, setTools] = useState<Tool[]>([])
 
+  const [theme, setTheme] = useState<string>('dark-blue')
+  const [anim, setAnim] = useState(false)
+
   // live clock
   useEffect(() => {
     const id = setInterval(() => setClock(new Date().toLocaleString()), 1000)
     return () => clearInterval(id)
   }, [])
+
+  // apply theme to document
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', theme)
+      // persist theme
+      const persisted = loadPersist() || {}
+      savePersist({ ...persisted, theme })
+    } catch (e) {
+      // ignore in non-browser env
+    }
+  }, [theme])
 
   // load demo data and merge persisted overrides (no external API calls)
   useEffect(() => {
@@ -116,6 +131,9 @@ export default function App(): JSX.Element {
         const map = new Map(persisted.schedules.map((x) => [x.id, x]))
         base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
       }
+      if (persisted.theme) {
+        setTheme(persisted.theme)
+      }
     }
 
     setAgents(base.agents)
@@ -126,17 +144,26 @@ export default function App(): JSX.Element {
     setTools(base.tools)
   }, [])
 
+  // animate on view change
+  useEffect(() => {
+    setAnim(true)
+    const t = setTimeout(() => setAnim(false), 320)
+    return () => clearTimeout(t)
+  }, [view])
+
   const activeAgentsCount = agents.filter((a) => a.status === 'online').length
   const tasksCompleted = tasks.filter((t) => t.completed).length
   const avgSuccessRate = agents.length ? Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length) : 0
   const sessionsRun = sessions.length
 
   // persistence helpers for interactive changes
-  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[] }) {
+  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[]; theme?: string }) {
+    const prev = loadPersist() || {}
     const toSave = {
       agents: updated?.agents ?? agents,
       tools: updated?.tools ?? tools,
       schedules: updated?.schedules ?? schedules,
+      theme: updated?.theme ?? prev.theme,
     }
     savePersist(toSave)
   }
@@ -165,11 +192,24 @@ export default function App(): JSX.Element {
     })
   }
 
-  return (
-    <div className="app-root fade-in">
-      <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} />
+  function toggleAgentStatus(id: string) {
+    setAgents((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, status: a.status === 'online' ? 'offline' : 'online' } : a))
+      persistAll({ agents: next })
+      return next
+    })
+  }
 
-      <main className="main-content container">
+  function changeTheme(newTheme: string) {
+    setTheme(newTheme)
+    persistAll({ theme: newTheme })
+  }
+
+  return (
+    <div className={`app-root fade-in ${anim ? 'view-anim' : ''}`}>
+      <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} theme={theme} setTheme={changeTheme} />
+
+      <main className={`main-content container ${anim ? 'view-transition' : ''}`}>
         <div className="header">
           <div className="brand">
             <div className="logo">AI</div>
@@ -209,7 +249,7 @@ export default function App(): JSX.Element {
           <div style={{ display: 'grid', gap: 16 }}>
             <div className="card">
               <h3>Agents</h3>
-              <AgentCards agents={agents} onToggleFavorite={toggleFavoriteAgent} />
+              <AgentCards agents={agents} onToggleFavorite={toggleFavoriteAgent} onToggleStatus={toggleAgentStatus} />
             </div>
 
             <div className="card">
@@ -227,7 +267,7 @@ export default function App(): JSX.Element {
         <section style={{ marginTop: 16, display: view === 'Agents' ? 'block' : 'none' }}>
           <div className="card">
             <h2>Agents</h2>
-            <AgentCards agents={agents} large onToggleFavorite={toggleFavoriteAgent} />
+            <AgentCards agents={agents} large onToggleFavorite={toggleFavoriteAgent} onToggleStatus={toggleAgentStatus} />
           </div>
         </section>
 

@@ -1,12 +1,14 @@
+import React from 'react'
 import type { Agent } from '../lib/supabase'
 
 type Props = {
   agents: Agent[]
   large?: boolean
   onToggleFavorite?: (id: string) => void
+  onToggleStatus?: (id: string) => void
 }
 
-export default function AgentCards({ agents, large = false, onToggleFavorite }: Props) {
+export default function AgentCards({ agents, large = false, onToggleFavorite, onToggleStatus }: Props) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: large ? 'repeat(3,1fr)' : 'repeat(3,1fr)', gap: 12 }}>
       {agents.map((a) => (
@@ -19,6 +21,14 @@ export default function AgentCards({ agents, large = false, onToggleFavorite }: 
                   <div>
                     <div className="agent-name">{a.name}</div>
                     <div className="agent-desc">{a.role} • {a.description}</div>
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                        <div className={`status-badge ${a.status === 'online' ? 'online' : a.status === 'idle' ? 'idle' : 'offline'}`}>{a.status}</div>
+                        <button className="toggle small" onClick={() => onToggleStatus && onToggleStatus(a.id)} title="Toggle status">
+                          <div className={`knob ${a.status === 'online' ? 'on' : ''}`} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

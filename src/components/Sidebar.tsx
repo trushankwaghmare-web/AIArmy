@@ -4,6 +4,8 @@ type Props = {
   view: string
   setView: (v: any) => void
   activeAgents: number
+  theme?: string
+  setTheme?: (t: string) => void
 }
 
 const NAV: { key: string; label: string }[] = [
@@ -15,7 +17,15 @@ const NAV: { key: string; label: string }[] = [
   { key: 'Tools', label: 'Tools' },
 ]
 
-export default function Sidebar({ view, setView, activeAgents }: Props) {
+const THEMES: { key: string; label: string }[] = [
+  { key: 'dark-blue', label: 'Blue' },
+  { key: 'dark-green', label: 'Green' },
+  { key: 'dark-purple', label: 'Purple' },
+  { key: 'dark-red', label: 'Red' },
+  { key: 'black', label: 'Black' },
+]
+
+export default function Sidebar({ view, setView, activeAgents, theme, setTheme }: Props) {
   return (
     <aside className="sidebar">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -48,10 +58,27 @@ export default function Sidebar({ view, setView, activeAgents }: Props) {
         </nav>
       </div>
 
-      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div className="text-muted">Active agents</div>
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <div className="text-muted">Theme</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {THEMES.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTheme && setTheme(t.key)}
+                title={t.label}
+                className={`theme-swatch ${theme === t.key ? 'active' : ''}`}
+                style={{ width: 36, height: 36, borderRadius: 8, border: 'none', cursor: 'pointer' }}
+              />
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 800 }}>{activeAgents}</div>
+          <div>
+            <div className="text-muted">Active agents</div>
+            <div style={{ fontWeight: 800 }}>{activeAgents}</div>
+          </div>
           <div className="status-dot" />
         </div>
       </div>
