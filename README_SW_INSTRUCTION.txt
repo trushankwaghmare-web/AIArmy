@@ -1,0 +1,1 @@
+/* Add import to main.tsx to register the SW */
