@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# hermes - Primary CLI entrypoint for the Hermes agent
+# This is a thin wrapper that forwards to the local Python CLI implementation (cli.py).
+
+set -euo pipefail
+
+PYTHON=${HERMES_PYTHON:-python3}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Run the CLI module
+exec "$PYTHON" "$SCRIPT_DIR/cli.py" "$@"
