@@ -12,8 +12,11 @@ import { loadPersist, savePersist } from './lib/persistence'
 import LoginPage from './components/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import UserProfile from './components/UserProfile'
+import { v4 as uuidv4 } from 'uuid'
+import type { Task } from './types'
 
-// Local types (kept here to avoid importing runtime Supabase types)
+// ... Agent, Session, AuditLog, Schedule, Tool types are same as before
+
 type Agent = {
   id: string
   name: string
@@ -24,17 +27,6 @@ type Agent = {
   tasksDone: number
   successRate: number
   favorite?: boolean
-}
-
-type Task = {
-  id: string
-  title: string
-  description?: string
-  agentId?: string
-  completed: boolean
-  success: boolean
-  runAt?: string
-  progress?: number
 }
 
 type Session = {
@@ -90,7 +82,7 @@ function AppInner(): JSX.Element {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [tools, setTools] = useState<Tool[]>([])
 
-  const [theme, setTheme] = useState<string>('dark-blue')
+  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>('system')
   const [anim, setAnim] = useState(false)
 
   // live clock
@@ -99,21 +91,28 @@ function AppInner(): JSX.Element {
     return () => clearInterval(id)
   }, [])
 
-  // apply theme to document
+  // apply theme mode to document (dark/light/system)
   useEffect(() => {
     try {
-      document.documentElement.setAttribute('data-theme', theme)
+      let effective = themeMode
+      if (themeMode === 'system') {
+        effective = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      }
+      document.documentElement.setAttribute('data-theme', effective === 'dark' ? 'dark-blue' : 'black')
+      // persist themeMode
       const persisted = loadPersist() || {}
-      savePersist({ ...persisted, theme })
-    } catch (e) {}
-  }, [theme])
+      savePersist({ ...persisted, themeMode })
+    } catch (e) {
+      // ignore in non-browser env
+    }
+  }, [themeMode])
 
   // load demo data and merge persisted overrides (no external API calls)
   useEffect(() => {
     const base = {
       agents: demoData.agents as Agent[],
       sessions: demoData.sessions as Session[],
-      tasks: demoData.tasks.map((t) => ({ ...t, progress: t.completed ? 100 : Math.floor(Math.random() * 40) })) as Task[],
+      tasks: demoData.tasks.map((t) => ({ ...t, progress: t.completed ? 100 : (t.progress ?? Math.floor(Math.random() * 40)) })) as Task[],
       auditLogs: demoData.auditLogs as AuditLog[],
       schedules: demoData.schedules as Schedule[],
       tools: demoData.tools as Tool[],
@@ -134,8 +133,11 @@ function AppInner(): JSX.Element {
         const map = new Map(persisted.schedules.map((x) => [x.id, x]))
         base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
       }
-      if (persisted.theme) {
-        setTheme(persisted.theme)
+      if (persisted.tasks) {
+        base.tasks = persisted.tasks
+      }
+      if (persisted.themeMode) {
+        setThemeMode(persisted.themeMode)
       }
     }
 
@@ -159,11 +161,14 @@ function AppInner(): JSX.Element {
     const id = setInterval(() => {
       setTasks((prev) => {
         const next = prev.map((t) => {
-          if (t.completed) return { ...t, progress: 100 }
+          if (t.completed || (t.progress || 0) >= 100) return { ...t, progress: 100 }
           const inc = Math.floor(Math.random() * 8)
           const p = Math.min(100, (t.progress || 0) + inc)
           return { ...t, progress: p }
         })
+        // persist tasks
+        const persisted = loadPersist() || {}
+        savePersist({ ...persisted, tasks: next })
         return next
       })
 
@@ -177,7 +182,9 @@ function AppInner(): JSX.Element {
           scope: 'automation',
           success: Math.random() > 0.1,
         }
-        return [newLog, ...prev].slice(0, 50)
+        const next = [newLog, ...prev].slice(0, 50)
+        // persist audit logs? We keep them volatile
+        return next
       })
     }, 3000)
     return () => clearInterval(id)
@@ -189,13 +196,14 @@ function AppInner(): JSX.Element {
   const sessionsRun = sessions.length
 
   // persistence helpers for interactive changes
-  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[]; theme?: string }) {
+  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[]; tasks?: Task[]; themeMode?: 'dark'|'light'|'system' }) {
     const prev = loadPersist() || {}
     const toSave = {
       agents: updated?.agents ?? agents,
       tools: updated?.tools ?? tools,
       schedules: updated?.schedules ?? schedules,
-      theme: updated?.theme ?? prev.theme,
+      tasks: updated?.tasks ?? tasks,
+      themeMode: updated?.themeMode ?? prev.themeMode ?? themeMode,
     }
     savePersist(toSave)
   }
@@ -211,6 +219,35 @@ function AppInner(): JSX.Element {
   function toggleSchedule(id: string) {
     setSchedules((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+      const updatedSchedule = next.find((s) => s.id === id)
+
+      // when enabling, add a scheduled task; when disabling, remove related scheduled tasks
+      if (updatedSchedule) {
+        if (updatedSchedule.enabled) {
+          // add a task representing the schedule
+          const newTask: Task = {
+            id: `sched-task-${uuidv4()}`,
+            title: `Scheduled: ${updatedSchedule.name}`,
+            completed: false,
+            success: false,
+            agentId: demoData.agents[0]?.id || 'agent-1',
+            progress: 0,
+          }
+          setTasks((prevTasks) => {
+            const nextTasks = [...prevTasks, newTask]
+            persistAll({ schedules: next, tasks: nextTasks })
+            return nextTasks
+          })
+        } else {
+          // remove tasks created by this schedule (title startsWith 'Scheduled: name')
+          setTasks((prevTasks) => {
+            const nextTasks = prevTasks.filter((t) => !t.title?.startsWith(`Scheduled: ${updatedSchedule.name}`))
+            persistAll({ schedules: next, tasks: nextTasks })
+            return nextTasks
+          })
+        }
+      }
+
       persistAll({ schedules: next })
       return next
     })
@@ -232,16 +269,16 @@ function AppInner(): JSX.Element {
     })
   }
 
-  function changeTheme(newTheme: string) {
-    setTheme(newTheme)
-    persistAll({ theme: newTheme })
+  function changeThemeMode(newMode: 'dark'|'light'|'system') {
+    setThemeMode(newMode)
+    persistAll({ themeMode: newMode })
   }
 
   if (!user) return <LoginPage />
 
   return (
     <div className={`app-root fade-in ${anim ? 'view-anim' : ''}`}>
-      <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} theme={theme} setTheme={changeTheme} />
+      <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} themeMode={themeMode} setThemeMode={changeThemeMode} />
 
       <main className={`main-content container ${anim ? 'view-transition' : ''}`}>
         <div className="header">

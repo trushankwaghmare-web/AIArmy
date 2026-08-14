@@ -1,11 +1,13 @@
 // Typed local persistence helpers for AI Army Dashboard
 import type { Agent, Tool, Schedule } from './supabase'
+import type { Task } from './types'
 
 export type PersistedState = {
   agents?: Agent[]
   tools?: Tool[]
   schedules?: Schedule[]
-  theme?: string
+  tasks?: Task[]
+  themeMode?: 'dark' | 'light' | 'system'
 }
 
 const KEY = 'ai-army-dashboard:v1'
