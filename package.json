@@ -24,6 +24,7 @@
     "workbox-build": "^6.5.4",
     "@types/node": "^20.4.2",
     "@types/uuid": "^9.0.2",
-    "@types/jsonwebtoken": "^9.0.2"
+    "@types/jsonwebtoken": "^9.0.2",
+    "@vercel/node": "^2.1.2"
   }
 }
