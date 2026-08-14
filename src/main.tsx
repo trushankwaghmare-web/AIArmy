@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './index.css'
+import './sw-register'
 
 // Ensure a root element exists — helpful for some static hosts or misconfigured index.html
 function ensureRoot() {
