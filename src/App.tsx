@@ -9,6 +9,9 @@ import ToolRegistry from './components/ToolRegistry'
 import './App.css'
 import { demoData } from './lib/demoData'
 import { loadPersist, savePersist } from './lib/persistence'
+import LoginPage from './components/LoginPage'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import UserProfile from './components/UserProfile'
 
 // Local types (kept here to avoid importing runtime Supabase types)
 type Agent = {
@@ -31,6 +34,7 @@ type Task = {
   completed: boolean
   success: boolean
   runAt?: string
+  progress?: number
 }
 
 type Session = {
@@ -72,7 +76,9 @@ type Tool = {
 
 type View = 'Overview' | 'Agents' | 'Sessions' | 'Activity' | 'Schedules' | 'Tools'
 
-export default function App(): JSX.Element {
+function AppInner(): JSX.Element {
+  const { user } = useAuth()
+
   const [view, setView] = useState<View>('Overview')
   const [clock, setClock] = useState<string>(new Date().toLocaleString())
   const [systemOK] = useState(true)
@@ -97,12 +103,9 @@ export default function App(): JSX.Element {
   useEffect(() => {
     try {
       document.documentElement.setAttribute('data-theme', theme)
-      // persist theme
       const persisted = loadPersist() || {}
       savePersist({ ...persisted, theme })
-    } catch (e) {
-      // ignore in non-browser env
-    }
+    } catch (e) {}
   }, [theme])
 
   // load demo data and merge persisted overrides (no external API calls)
@@ -110,7 +113,7 @@ export default function App(): JSX.Element {
     const base = {
       agents: demoData.agents as Agent[],
       sessions: demoData.sessions as Session[],
-      tasks: demoData.tasks as Task[],
+      tasks: demoData.tasks.map((t) => ({ ...t, progress: t.completed ? 100 : Math.floor(Math.random() * 40) })) as Task[],
       auditLogs: demoData.auditLogs as AuditLog[],
       schedules: demoData.schedules as Schedule[],
       tools: demoData.tools as Tool[],
@@ -151,8 +154,37 @@ export default function App(): JSX.Element {
     return () => clearTimeout(t)
   }, [view])
 
+  // Simulate real-time updates: every 3s, randomly update task progress and activity logs
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTasks((prev) => {
+        const next = prev.map((t) => {
+          if (t.completed) return { ...t, progress: 100 }
+          const inc = Math.floor(Math.random() * 8)
+          const p = Math.min(100, (t.progress || 0) + inc)
+          return { ...t, progress: p }
+        })
+        return next
+      })
+
+      setAuditLogs((prev) => {
+        const rndAgent = demoData.agents[Math.floor(Math.random() * demoData.agents.length)]
+        const newLog: AuditLog = {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          agentName: rndAgent.name,
+          action: ['Ran job', 'Fetched data', 'Verified output', 'Alert sent'][Math.floor(Math.random() * 4)],
+          scope: 'automation',
+          success: Math.random() > 0.1,
+        }
+        return [newLog, ...prev].slice(0, 50)
+      })
+    }, 3000)
+    return () => clearInterval(id)
+  }, [])
+
   const activeAgentsCount = agents.filter((a) => a.status === 'online').length
-  const tasksCompleted = tasks.filter((t) => t.completed).length
+  const tasksCompleted = tasks.filter((t) => t.completed || (t.progress || 0) >= 100).length
   const avgSuccessRate = agents.length ? Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length) : 0
   const sessionsRun = sessions.length
 
@@ -205,6 +237,8 @@ export default function App(): JSX.Element {
     persistAll({ theme: newTheme })
   }
 
+  if (!user) return <LoginPage />
+
   return (
     <div className={`app-root fade-in ${anim ? 'view-anim' : ''}`}>
       <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} theme={theme} setTheme={changeTheme} />
@@ -224,10 +258,8 @@ export default function App(): JSX.Element {
               <div style={{ fontWeight: 700 }}>{clock}</div>
               <div className="text-muted" style={{ fontSize: 12 }}>{new Date().toLocaleTimeString()}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="status-dot" title={systemOK ? 'All Systems Operational' : 'Degraded'} />
-              <div className="text-muted">{systemOK ? 'All Systems Operational' : 'Degraded'}</div>
-            </div>
+
+            <UserProfile />
           </div>
         </div>
 
@@ -300,5 +332,13 @@ export default function App(): JSX.Element {
         </section>
       </main>
     </div>
+  )
+}
+
+export default function AppWithAuth() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   )
 }
