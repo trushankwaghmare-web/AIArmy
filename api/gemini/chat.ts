@@ -1,13 +1,13 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
-// Serverless proxy to Google Gemini / Generative API
+// Serverless proxy to Google Gemini / Generative API (robust parsing + local fetch polyfill)
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { agent, message } = req.body || {}
   if (!agent || !message) return res.status(400).json({ error: 'agent and message required' })
 
   const AGENT_PROMPTS: Record<string, string> = {
-    Atlas: `You are Atlas, the Strategic Director. You provide high-level planning, prioritize goals, and summarize plans succinctly. Keep tone confident and concise. When asked for steps, provide a clear ordered list.`,
+    Atlas: `You are Atlas, the Strategic Director. You provide high-level planning, prioritize goals, and summarize plans succinctly. Keep tone confident and concise. When asked for steps, provide clear numbered steps and brief justifications.`,
     Scout: `You are Scout Research, a data & research agent. You collect, analyze and summarize data and sources. Provide citations when possible and be cautious about uncertain facts.`,
     Forge: `You are Forge Execution, responsible for orchestrating and executing tasks. Provide step-by-step operational instructions, checks, and error handling suggestions.`,
     Sentinel: `You are Sentinel QA, a quality assurance agent. Focus on validations, tests, edge cases, and risk analysis. Provide mitigation steps and test ideas.`,
@@ -23,19 +23,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Construct a prompt combining system and user message
   const prompt = `${systemPrompt}\n\nUser: ${message}\nAssistant:`
 
+  // helper to obtain fetch in environments that may not have global fetch (local Node)
+  async function getFetch() {
+    if (typeof fetch !== 'undefined') return fetch
+    try {
+      const mod = await import('node-fetch')
+      return (mod.default ?? mod) as typeof fetch
+    } catch (e) {
+      // last resort: throw
+      throw new Error('fetch is not available in this runtime and node-fetch could not be imported')
+    }
+  }
+
   try {
-    // Call Google Generative Language API (text-bison) - endpoint may vary by API version
     const url = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${encodeURIComponent(apiKey)}`
     const body = {
       prompt: {
-        text: prompt
+        text: prompt,
       },
-      // model controls
       temperature: 0.2,
       maxOutputTokens: 512,
     }
 
-    const r = await fetch(url, {
+    const doFetch = await getFetch()
+    const r = await doFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -47,21 +58,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = await r.json()
+
     // Attempt to extract text from known response shapes
     let output = ''
-    if (data.candidates && data.candidates[0] && data.candidates[0].output) {
-      output = data.candidates[0].output
-    } else if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content[0] && data.candidates[0].content[0].text) {
-      output = data.candidates[0].content[0].text
-    } else if (data.output && data.output[0] && data.output[0].content && data.output[0].content[0] && data.output[0].content[0].text) {
-      output = data.output[0].content[0].text
-    } else if (typeof data.candidates === 'string') {
-      output = data.candidates
-    } else if (data.reply && data.reply[0] && data.reply[0].content) {
-      output = data.reply[0].content
-    } else {
-      output = JSON.stringify(data)
+    if (data?.candidates && data.candidates[0]) {
+      const c = data.candidates[0]
+      if (typeof c === 'string') output = c
+      else if (c.output && typeof c.output === 'string') output = c.output
+      else if (c.content && c.content[0] && c.content[0].text) output = c.content[0].text
     }
+
+    if (!output && data?.output?.[0]?.content?.[0]?.text) {
+      output = data.output[0].content[0].text
+    }
+
+    if (!output && data?.reply?.[0]?.content) {
+      output = data.reply[0].content
+    }
+
+    if (!output && typeof data === 'string') output = data
+    if (!output) output = JSON.stringify(data)
 
     return res.status(200).json({ reply: output })
   } catch (e: any) {
