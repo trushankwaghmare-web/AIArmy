@@ -1,381 +1,198 @@
-import React, { useEffect, useState } from 'react'
-import Sidebar from './components/Sidebar'
-import StatCards from './components/StatCards'
-import AgentCards from './components/AgentCards'
-import SessionList from './components/SessionList'
-import ActivityFeed from './components/ActivityFeed'
-import ScheduleList from './components/ScheduleList'
-import ToolRegistry from './components/ToolRegistry'
-import './App.css'
-import { demoData } from './lib/demoData'
-import { loadPersist, savePersist } from './lib/persistence'
-import LoginPage from './components/LoginPage'
-import { AuthProvider, useAuth } from './context/AuthContext'
-import UserProfile from './components/UserProfile'
-import { v4 as uuidv4 } from 'uuid'
-import type { Task } from './types'
+import React, { useEffect, useRef, useState } from "react";
 
-// ... Agent, Session, AuditLog, Schedule, Tool types are same as before
+type AgentStatus = "active" | "busy" | "idle" | "offline";
 
 type Agent = {
-  id: string
-  name: string
-  role: string
-  description?: string
-  avatarColor?: string
-  status: 'online' | 'idle' | 'offline'
-  tasksDone: number
-  successRate: number
-  favorite?: boolean
-}
+  id: string;
+  name: string;
+  role: string;
+  color: string;
+  icon: string;
+  status: AgentStatus;
+  tasks: number;
+  uptime: number;
+};
 
-type Session = {
-  id: string
-  title: string
-  summary?: string
-  agentIds: string[]
-  tasksCount: number
-  progress: number
-  status: 'running' | 'completed' | 'failed' | 'queued'
-}
+const AGENTS: Agent[] = [
+  { id: "atlas", name: "Atlas", role: "Commander", color: "#00f5ff", icon: "🧠", status: "active", tasks: 47, uptime: 99.2 },
+  { id: "scout", name: "Scout", role: "Recon & Search", color: "#a855f7", icon: "🔍", status: "active", tasks: 31, uptime: 97.8 },
+  { id: "forge", name: "Forge", role: "Code Builder", color: "#f97316", icon: "⚙️", status: "busy", tasks: 58, uptime: 98.5 },
+  { id: "sentinel", name: "Sentinel", role: "Security", color: "#22c55e", icon: "🛡️", status: "active", tasks: 24, uptime: 99.9 },
+  { id: "link", name: "Link", role: "Communicator", color: "#eab308", icon: "🔗", status: "idle", tasks: 19, uptime: 95.1 },
+  { id: "chronos", name: "Chronos", role: "Scheduler", color: "#ec4899", icon: "⏱️", status: "active", tasks: 63, uptime: 98.0 },
+];
 
-type AuditLog = {
-  id: string
-  timestamp: string
-  agentName: string
-  action: string
-  scope?: string
-  success: boolean
-}
+const PAGES = ["Dashboard", "Activity", "Schedule", "Chat", "Settings"] as const;
+export type Page = (typeof PAGES)[number];
 
-type Schedule = {
-  id: string
-  name: string
-  interval: string
-  constraints?: string
-  nextRun: string
-  enabled: boolean
-}
+export default function App(): JSX.Element {
+  const [page, setPage] = useState<Page>("Dashboard");
+  const [toggles, setToggles] = useState<Record<string, boolean>>(
+    Object.fromEntries(AGENTS.map((a) => [a.id, a.status === "active"]))
+  );
 
-type Tool = {
-  id: string
-  name: string
-  category: string
-  version: string
-  active: boolean
-  description?: string
-}
+  const [chatInput, setChatInput] = useState<string>("");
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
 
-type View = 'Overview' | 'Agents' | 'Sessions' | 'Activity' | 'Schedules' | 'Tools'
-
-function AppInner(): JSX.Element {
-  const { user } = useAuth()
-
-  const [view, setView] = useState<View>('Overview')
-  const [clock, setClock] = useState<string>(new Date().toLocaleString())
-  const [systemOK] = useState(true)
-
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
-  const [schedules, setSchedules] = useState<Schedule[]>([])
-  const [tools, setTools] = useState<Tool[]>([])
-
-  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'system'>('system')
-  const [anim, setAnim] = useState(false)
-
-  // live clock
   useEffect(() => {
-    const id = setInterval(() => setClock(new Date().toLocaleString()), 1000)
-    return () => clearInterval(id)
-  }, [])
+    // Example: focus input when entering Chat page
+    if (page === "Chat") {
+      chatInputRef.current?.focus();
+    }
+  }, [page]);
 
-  // apply theme mode to document (dark/light/system)
   useEffect(() => {
+    // Load persisted toggles if available
     try {
-      let effective = themeMode
-      if (themeMode === 'system') {
-        effective = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      const raw = localStorage.getItem("ai-army:toggles");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, boolean>;
+        setToggles((t) => ({ ...t, ...parsed }));
       }
-      document.documentElement.setAttribute('data-theme', effective === 'dark' ? 'dark-blue' : 'black')
-      // persist themeMode
-      const persisted = loadPersist() || {}
-      savePersist({ ...persisted, themeMode })
-    } catch (e) {
-      // ignore in non-browser env
+    } catch {
+      // ignore parse errors
     }
-  }, [themeMode])
+  }, []);
 
-  // load demo data and merge persisted overrides (no external API calls)
-  useEffect(() => {
-    const base = {
-      agents: demoData.agents as Agent[],
-      sessions: demoData.sessions as Session[],
-      tasks: demoData.tasks.map((t) => ({ ...t, progress: t.completed ? 100 : (t.progress ?? Math.floor(Math.random() * 40)) })) as Task[],
-      auditLogs: demoData.auditLogs as AuditLog[],
-      schedules: demoData.schedules as Schedule[],
-      tools: demoData.tools as Tool[],
-    }
-
-    const persisted = loadPersist()
-
-    if (persisted) {
-      if (persisted.agents) {
-        const map = new Map(persisted.agents.map((x) => [x.id, x]))
-        base.agents = base.agents.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
+  function toggleAgent(id: string) {
+    setToggles((t) => {
+      const next = { ...t, [id]: !t[id] };
+      try {
+        localStorage.setItem("ai-army:toggles", JSON.stringify(next));
+      } catch {
+        // ignore storage errors
       }
-      if (persisted.tools) {
-        const map = new Map(persisted.tools.map((x) => [x.id, x]))
-        base.tools = base.tools.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
-      }
-      if (persisted.schedules) {
-        const map = new Map(persisted.schedules.map((x) => [x.id, x]))
-        base.schedules = base.schedules.map((x) => ({ ...x, ...(map.get(x.id) || {}) }))
-      }
-      if (persisted.tasks) {
-        base.tasks = persisted.tasks
-      }
-      if (persisted.themeMode) {
-        setThemeMode(persisted.themeMode)
-      }
-    }
-
-    setAgents(base.agents)
-    setSessions(base.sessions)
-    setTasks(base.tasks)
-    setAuditLogs(base.auditLogs)
-    setSchedules(base.schedules)
-    setTools(base.tools)
-  }, [])
-
-  // animate on view change
-  useEffect(() => {
-    setAnim(true)
-    const t = setTimeout(() => setAnim(false), 320)
-    return () => clearTimeout(t)
-  }, [view])
-
-  // Simulate real-time updates: every 3s, randomly update task progress and activity logs
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTasks((prev) => {
-        const next = prev.map((t) => {
-          if (t.completed || (t.progress || 0) >= 100) return { ...t, progress: 100 }
-          const inc = Math.floor(Math.random() * 8)
-          const p = Math.min(100, (t.progress || 0) + inc)
-          return { ...t, progress: p }
-        })
-        // persist tasks
-        const persisted = loadPersist() || {}
-        savePersist({ ...persisted, tasks: next })
-        return next
-      })
-
-      setAuditLogs((prev) => {
-        const rndAgent = demoData.agents[Math.floor(Math.random() * demoData.agents.length)]
-        const newLog: AuditLog = {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          agentName: rndAgent.name,
-          action: ['Ran job', 'Fetched data', 'Verified output', 'Alert sent'][Math.floor(Math.random() * 4)],
-          scope: 'automation',
-          success: Math.random() > 0.1,
-        }
-        const next = [newLog, ...prev].slice(0, 50)
-        // persist audit logs? We keep them volatile
-        return next
-      })
-    }, 3000)
-    return () => clearInterval(id)
-  }, [])
-
-  const activeAgentsCount = agents.filter((a) => a.status === 'online').length
-  const tasksCompleted = tasks.filter((t) => t.completed || (t.progress || 0) >= 100).length
-  const avgSuccessRate = agents.length ? Math.round(agents.reduce((sum, a) => sum + a.successRate, 0) / agents.length) : 0
-  const sessionsRun = sessions.length
-
-  // persistence helpers for interactive changes
-  function persistAll(updated?: { agents?: Agent[]; tools?: Tool[]; schedules?: Schedule[]; tasks?: Task[]; themeMode?: 'dark'|'light'|'system' }) {
-    const prev = loadPersist() || {}
-    const toSave = {
-      agents: updated?.agents ?? agents,
-      tools: updated?.tools ?? tools,
-      schedules: updated?.schedules ?? schedules,
-      tasks: updated?.tasks ?? tasks,
-      themeMode: updated?.themeMode ?? prev.themeMode ?? themeMode,
-    }
-    savePersist(toSave)
+      return next;
+    });
   }
 
-  function toggleTool(id: string) {
-    setTools((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, active: !t.active } : t))
-      persistAll({ tools: next })
-      return next
-    })
+  function handleSendMessage() {
+    if (!chatInput.trim()) return;
+    // For now, just echo to console and clear
+    console.log("Send message to agent:", chatInput);
+    setChatInput("");
   }
-
-  function toggleSchedule(id: string) {
-    setSchedules((prev) => {
-      const next = prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
-      const updatedSchedule = next.find((s) => s.id === id)
-
-      // when enabling, add a scheduled task; when disabling, remove related scheduled tasks
-      if (updatedSchedule) {
-        if (updatedSchedule.enabled) {
-          // add a task representing the schedule
-          const newTask: Task = {
-            id: `sched-task-${uuidv4()}`,
-            title: `Scheduled: ${updatedSchedule.name}`,
-            completed: false,
-            success: false,
-            agentId: demoData.agents[0]?.id || 'agent-1',
-            progress: 0,
-          }
-          setTasks((prevTasks) => {
-            const nextTasks = [...prevTasks, newTask]
-            persistAll({ schedules: next, tasks: nextTasks })
-            return nextTasks
-          })
-        } else {
-          // remove tasks created by this schedule (title startsWith 'Scheduled: name')
-          setTasks((prevTasks) => {
-            const nextTasks = prevTasks.filter((t) => !t.title?.startsWith(`Scheduled: ${updatedSchedule.name}`))
-            persistAll({ schedules: next, tasks: nextTasks })
-            return nextTasks
-          })
-        }
-      }
-
-      persistAll({ schedules: next })
-      return next
-    })
-  }
-
-  function toggleFavoriteAgent(id: string) {
-    setAgents((prev) => {
-      const next = prev.map((a) => (a.id === id ? { ...a, favorite: !a.favorite } : a))
-      persistAll({ agents: next })
-      return next
-    })
-  }
-
-  function toggleAgentStatus(id: string) {
-    setAgents((prev) => {
-      const next = prev.map((a) => (a.id === id ? { ...a, status: a.status === 'online' ? 'offline' : 'online' } : a))
-      persistAll({ agents: next })
-      return next
-    })
-  }
-
-  function changeThemeMode(newMode: 'dark'|'light'|'system') {
-    setThemeMode(newMode)
-    persistAll({ themeMode: newMode })
-  }
-
-  if (!user) return <LoginPage />
 
   return (
-    <div className={`app-root fade-in ${anim ? 'view-anim' : ''}`}>
-      <Sidebar view={view} setView={setView} activeAgents={activeAgentsCount} themeMode={themeMode} setThemeMode={changeThemeMode} />
+    <div style={{ display: "flex", minHeight: "100vh", background: "#04040f", color: "#fff", fontFamily: "system-ui" }}>
+      {/* Sidebar */}
+      <div style={{ width: 190, background: "#08081a", borderRight: "1px solid #00f5ff22", display: "flex", flexDirection: "column", padding: 16 }}>
+        <div style={{ color: "#00f5ff", fontWeight: 800, fontSize: 18, marginBottom: 24 }}>⚡ AI ARMY</div>
+        {PAGES.map((p) => (
+          <button
+            key={p}
+            onClick={() => setPage(p)}
+            style={{
+              background: page === p ? "#00f5ff22" : "transparent",
+              border: `1px solid ${page === p ? "#00f5ff" : "transparent"}`,
+              color: page === p ? "#00f5ff" : "#888",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 6,
+              cursor: "pointer",
+              textAlign: "left",
+              fontSize: 14,
+            }}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
 
-      <main className={`main-content container ${anim ? 'view-transition' : ''}`}>
-        <div className="header">
-          <div className="brand">
-            <div className="logo">AI</div>
-            <div>
-              <h1>AI Army Dashboard</h1>
-              <p className="text-muted">Manage agents, sessions, schedules and tools</p>
+      {/* Content */}
+      <div style={{ flex: 1, padding: 28 }}>
+        <h1 style={{ color: "#fff", marginTop: 0 }}>{page}</h1>
+
+        {page === "Dashboard" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
+            {AGENTS.map((a) => (
+              <div key={a.id} style={{ background: "#0d0d1f", border: `1px solid ${a.color}44`, borderRadius: 14, padding: 18 }}>
+                <div style={{ fontSize: 32 }}>{a.icon}</div>
+                <div style={{ color: a.color, fontWeight: 700, fontSize: 17, marginTop: 8 }}>{a.name}</div>
+                <div style={{ color: "#888", fontSize: 12 }}>{a.role}</div>
+                <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "#ccc" }}>
+                    Tasks: <b style={{ color: "#fff" }}>{a.tasks}</b>
+                  </span>
+                  <span style={{ color: a.color }}>{a.uptime}%</span>
+                </div>
+                <button
+                  onClick={() => toggleAgent(a.id)}
+                  style={{
+                    marginTop: 12,
+                    width: "100%",
+                    background: toggles[a.id] ? "#22c55e22" : "#ffffff11",
+                    border: `1px solid ${toggles[a.id] ? "#22c55e" : "#555"}`,
+                    color: toggles[a.id] ? "#22c55e" : "#aaa",
+                    borderRadius: 6,
+                    padding: "7px 0",
+                    cursor: "pointer",
+                  }}
+                >
+                  {toggles[a.id] ? "● Active" : "○ Offline"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {page === "Activity" && (
+          <div>
+            {["Forge built API endpoint", "Sentinel blocked 3 requests", "Scout found 142 results", "Chronos scheduled tasks"].map((log, i) => (
+              <div key={i} style={{ background: "#0d0d1f", border: "1px solid #ffffff11", borderRadius: 10, padding: "12px 16px", marginBottom: 10, color: "#ccc" }}>
+                {log}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {page === "Schedule" && (
+          <div>
+            {["Daily Report — 9:00", "Security Scan — 12:00", "Data Backup — 15:00", "Night Summary — 22:00"].map((t, i) => (
+              <div key={i} style={{ background: "#0d0d1f", border: "1px solid #ffffff11", borderRadius: 10, padding: "12px 16px", marginBottom: 10, color: "#ccc", display: "flex", justifyContent: "space-between" }}>
+                <span>{t}</span>
+                <button style={{ background: "#22c55e22", border: "1px solid #22c55e", color: "#22c55e", borderRadius: 6, padding: "4px 12px", cursor: "pointer" }}>
+                  Done
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {page === "Chat" && (
+          <div style={{ background: "#0d0d1f", border: "1px solid #00f5ff33", borderRadius: 14, padding: 20 }}>
+            <div style={{ color: "#00f5ff", marginBottom: 16 }}>💬 Chat with Atlas</div>
+            <div style={{ background: "#ffffff08", borderRadius: 10, padding: 14, color: "#888", marginBottom: 16 }}>Hello! I am Atlas, your AI Commander. How can I help?</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <input
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type message..."
+                style={{ flex: 1, background: "#ffffff11", border: "1px solid #444", borderRadius: 8, padding: "10px 14px", color: "#fff", outline: "none" }}
+              />
+              <button
+                onClick={handleSendMessage}
+                style={{ background: "#00f5ff22", border: "1px solid #00f5ff", color: "#00f5ff", borderRadius: 8, padding: "10px 20px", cursor: "pointer" }}
+              >
+                Send
+              </button>
             </div>
           </div>
+        )}
 
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 700 }}>{clock}</div>
-              <div className="text-muted" style={{ fontSize: 12 }}>{new Date().toLocaleTimeString()}</div>
+        {page === "Settings" && (
+          <div style={{ maxWidth: 400 }}>
+            <div style={{ background: "#0d0d1f", border: "1px solid #333", borderRadius: 14, padding: 20, marginBottom: 16 }}>
+              <div style={{ color: "#aaa", marginBottom: 12 }}>Theme</div>
+              {["Dark", "Midnight", "Neon"].map((t) => (
+                <button key={t} style={{ background: "#ffffff11", border: "1px solid #444", color: "#ccc", borderRadius: 8, padding: "8px 16px", marginRight: 8, cursor: "pointer" }}>{t}</button>
+              ))}
             </div>
-
-            <UserProfile />
+            <button style={{ background: "#00f5ff22", border: "1px solid #00f5ff", color: "#00f5ff", borderRadius: 10, padding: "12px 28px", cursor: "pointer", fontWeight: 700 }}>Save Settings</button>
           </div>
-        </div>
-
-        <section style={{ marginTop: 16 }}>
-          <StatCards
-            activeAgents={activeAgentsCount}
-            tasksCompleted={tasksCompleted}
-            successRate={avgSuccessRate}
-            sessionsRun={sessionsRun}
-          />
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Overview' ? 'block' : 'none' }}>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <h2 style={{ marginTop: 0 }}>Overview</h2>
-            <p className="text-muted">Quick snapshot of the AI Army</p>
-          </div>
-
-          <div style={{ display: 'grid', gap: 16 }}>
-            <div className="card">
-              <h3>Agents</h3>
-              <AgentCards agents={agents} onToggleFavorite={toggleFavoriteAgent} onToggleStatus={toggleAgentStatus} />
-            </div>
-
-            <div className="card">
-              <h3>Recent Sessions</h3>
-              <SessionList sessions={sessions} />
-            </div>
-
-            <div className="card">
-              <h3>Activity</h3>
-              <ActivityFeed logs={auditLogs} />
-            </div>
-          </div>
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Agents' ? 'block' : 'none' }}>
-          <div className="card">
-            <h2>Agents</h2>
-            <AgentCards agents={agents} large onToggleFavorite={toggleFavoriteAgent} onToggleStatus={toggleAgentStatus} />
-          </div>
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Sessions' ? 'block' : 'none' }}>
-          <div className="card">
-            <h2>Sessions</h2>
-            <SessionList sessions={sessions} showAll />
-          </div>
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Activity' ? 'block' : 'none' }}>
-          <div className="card">
-            <h2>Activity Log</h2>
-            <ActivityFeed logs={auditLogs} showAll />
-          </div>
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Schedules' ? 'block' : 'none' }}>
-          <div className="card">
-            <h2>Schedules</h2>
-            <ScheduleList schedules={schedules} onToggleEnabled={toggleSchedule} />
-          </div>
-        </section>
-
-        <section style={{ marginTop: 16, display: view === 'Tools' ? 'block' : 'none' }}>
-          <div className="card">
-            <h2>Tool Registry</h2>
-            <ToolRegistry tools={tools} onToggleActive={toggleTool} />
-          </div>
-        </section>
-      </main>
+        )}
+      </div>
     </div>
-  )
-}
-
-export default function AppWithAuth() {
-  return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
-  )
+  );
 }
