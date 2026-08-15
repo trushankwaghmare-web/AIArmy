@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-
-type AgentStatus = "active" | "busy" | "idle" | "offline";
+import type { Page } from "./types";
 
 type Agent = {
   id: string;
@@ -8,7 +7,7 @@ type Agent = {
   role: string;
   color: string;
   icon: string;
-  status: AgentStatus;
+  status: "active" | "busy" | "idle" | "offline";
   tasks: number;
   uptime: number;
 };
@@ -23,7 +22,6 @@ const AGENTS: Agent[] = [
 ];
 
 const PAGES = ["Dashboard", "Activity", "Schedule", "Chat", "Settings"] as const;
-export type Page = (typeof PAGES)[number];
 
 export default function App(): JSX.Element {
   const [page, setPage] = useState<Page>("Dashboard");
@@ -32,26 +30,19 @@ export default function App(): JSX.Element {
   );
 
   const [chatInput, setChatInput] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [messages, setMessages] = useState<{ id: string; sender: "user" | "agent"; text: string }[]>([]);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    // Example: focus input when entering Chat page
-    if (page === "Chat") {
-      chatInputRef.current?.focus();
-    }
+    if (page === "Chat") chatInputRef.current?.focus();
   }, [page]);
 
   useEffect(() => {
-    // Load persisted toggles if available
     try {
       const raw = localStorage.getItem("ai-army:toggles");
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, boolean>;
-        setToggles((t) => ({ ...t, ...parsed }));
-      }
-    } catch {
-      // ignore parse errors
-    }
+      if (raw) setToggles((t) => ({ ...t, ...(JSON.parse(raw) as Record<string, boolean>) }));
+    } catch {}
   }, []);
 
   function toggleAgent(id: string) {
@@ -59,18 +50,40 @@ export default function App(): JSX.Element {
       const next = { ...t, [id]: !t[id] };
       try {
         localStorage.setItem("ai-army:toggles", JSON.stringify(next));
-      } catch {
-        // ignore storage errors
-      }
+      } catch {}
       return next;
     });
   }
 
-  function handleSendMessage() {
-    if (!chatInput.trim()) return;
-    // For now, just echo to console and clear
-    console.log("Send message to agent:", chatInput);
+  async function sendChat() {
+    const text = chatInput.trim();
+    if (!text) return;
+    const userMsg = { id: `u-${Date.now()}`, sender: "user" as const, text };
+    setMessages((m) => [...m, userMsg]);
     setChatInput("");
+
+    // Call server-side proxy endpoint
+    setLoading(true);
+    try {
+      const resp = await fetch("/api/gemini/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent: "Atlas", message: text }),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Upstream error: ${txt}`);
+      }
+      const j = await resp.json();
+      const reply = j.reply || j.error || "(no reply)";
+      const agentMsg = { id: `a-${Date.now()}`, sender: "agent" as const, text: String(reply) };
+      setMessages((m) => [...m, agentMsg]);
+    } catch (e: any) {
+      const errMsg = { id: `e-${Date.now()}`, sender: "agent" as const, text: `Error: ${e.message || String(e)}` };
+      setMessages((m) => [...m, errMsg]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -81,7 +94,7 @@ export default function App(): JSX.Element {
         {PAGES.map((p) => (
           <button
             key={p}
-            onClick={() => setPage(p)}
+            onClick={() => setPage(p as Page)}
             style={{
               background: page === p ? "#00f5ff22" : "transparent",
               border: `1px solid ${page === p ? "#00f5ff" : "transparent"}`,
@@ -103,6 +116,44 @@ export default function App(): JSX.Element {
       <div style={{ flex: 1, padding: 28 }}>
         <h1 style={{ color: "#fff", marginTop: 0 }}>{page}</h1>
 
+        {page === "Chat" && (
+          <div style={{ background: "#0d0d1f", border: "1px solid #00f5ff33", borderRadius: 14, padding: 20 }}>
+            <div style={{ color: "#00f5ff", marginBottom: 16 }}>💬 Chat with Atlas</div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
+              {messages.map((m) => (
+                <div key={m.id} style={{ alignSelf: m.sender === "user" ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+                  <div style={{ background: m.sender === "user" ? "#00f5ff11" : "#ffffff08", padding: 12, borderRadius: 10, color: "#ddd" }}>{m.text}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <input
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type message..."
+                style={{ flex: 1, background: "#ffffff11", border: "1px solid #444", borderRadius: 8, padding: "10px 14px", color: "#fff", outline: "none" }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendChat();
+                  }
+                }}
+              />
+              <button
+                onClick={sendChat}
+                disabled={loading}
+                style={{ background: "#00f5ff22", border: "1px solid #00f5ff", color: "#00f5ff", borderRadius: 8, padding: "10px 20px", cursor: "pointer" }}
+              >
+                {loading ? "…" : "Send"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Other pages unchanged (Dashboard, Activity, Schedule, Settings) - simplified placeholders */}
         {page === "Dashboard" && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
             {AGENTS.map((a) => (
@@ -156,28 +207,6 @@ export default function App(): JSX.Element {
                 </button>
               </div>
             ))}
-          </div>
-        )}
-
-        {page === "Chat" && (
-          <div style={{ background: "#0d0d1f", border: "1px solid #00f5ff33", borderRadius: 14, padding: 20 }}>
-            <div style={{ color: "#00f5ff", marginBottom: 16 }}>💬 Chat with Atlas</div>
-            <div style={{ background: "#ffffff08", borderRadius: 10, padding: 14, color: "#888", marginBottom: 16 }}>Hello! I am Atlas, your AI Commander. How can I help?</div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <input
-                ref={chatInputRef}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type message..."
-                style={{ flex: 1, background: "#ffffff11", border: "1px solid #444", borderRadius: 8, padding: "10px 14px", color: "#fff", outline: "none" }}
-              />
-              <button
-                onClick={handleSendMessage}
-                style={{ background: "#00f5ff22", border: "1px solid #00f5ff", color: "#00f5ff", borderRadius: 8, padding: "10px 20px", cursor: "pointer" }}
-              >
-                Send
-              </button>
-            </div>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-// shared types for tasks
+// shared types for tasks and app views
 export type Task = {
   id: string
   title: string
@@ -9,3 +9,5 @@ export type Task = {
   runAt?: string
   progress?: number
 }
+
+export type Page = 'Dashboard' | 'Activity' | 'Schedule' | 'Chat' | 'Settings'

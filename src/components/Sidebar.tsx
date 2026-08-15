@@ -1,20 +1,20 @@
 import React from 'react'
+import type { Page } from '../types'
 
 type Props = {
-  view: string
-  setView: (v: any) => void
+  view: Page
+  setView: (v: Page) => void
   activeAgents: number
   theme?: string
   setTheme?: (t: string) => void
 }
 
-const NAV: { key: string; label: string }[] = [
-  { key: 'Overview', label: 'Overview' },
-  { key: 'Agents', label: 'Agents' },
-  { key: 'Sessions', label: 'Sessions' },
-  { key: 'Activity', label: 'Activity Log' },
-  { key: 'Schedules', label: 'Schedules' },
-  { key: 'Tools', label: 'Tools' },
+const NAV: { key: Page; label: string }[] = [
+  { key: 'Dashboard', label: 'Overview' },
+  { key: 'Activity', label: 'Activity' },
+  { key: 'Schedule', label: 'Schedule' },
+  { key: 'Chat', label: 'Chat' },
+  { key: 'Settings', label: 'Settings' },
 ]
 
 const THEMES: { key: string; label: string }[] = [
